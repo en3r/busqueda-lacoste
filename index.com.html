@@ -1,0 +1,1053 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<title>Consulta de Precios</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.4/html5-qrcode.min.js"></script>
+  <script src="https://unpkg.com/@zxing/browser@0.2.1"></script>
+<style>
+  :root{
+    --bg: #0E1A13;
+    --panel: #15271C;
+    --panel-2: #1C3527;
+    --line: #2E4C39;
+    --text: #EAF3EC;
+    --muted: #8FAE9B;
+    --accent: #3E9962;
+    --accent-text: #0B1A11;
+    --bad: #D2543A;
+    --good: #6FA36A;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  *{ box-sizing:border-box; }
+  html,body{
+    margin:0; padding:0; height:100%;
+    background:var(--bg); color:var(--text);
+    font-family:var(--sans);
+    font-weight:600;
+    -webkit-tap-highlight-color: transparent;
+  }
+  body{
+    display:flex; flex-direction:column;
+    min-height:100dvh;
+    position:relative;
+  }
+  #bgCroco{
+    position:fixed; inset:0;
+    z-index:0;
+    display:flex; align-items:center; justify-content:center;
+    overflow:hidden;
+    pointer-events:none;
+  }
+  #bgCroco svg{
+    width:160vw; max-width:1400px;
+    opacity:0.07;
+    transform:rotate(-8deg);
+  }
+  header, main{ position:relative; z-index:1; }
+
+  header{
+    padding:22px 18px 18px;
+    border-bottom:1px solid var(--line);
+    display:flex; flex-direction:column; align-items:center;
+    gap:2px;
+    text-align:center;
+  }
+  header .brand{
+    font-size:34px; font-weight:800; letter-spacing:.06em; margin:0;
+    color:var(--text);
+    text-transform:uppercase;
+  }
+  header .subbrand{
+    font-size:12.5px; font-weight:700; letter-spacing:.08em; text-transform:uppercase;
+    color:var(--accent);
+    margin-top:2px;
+  }
+  header .status{
+    font-family:var(--mono); font-size:11.5px; font-weight:700; color:var(--muted);
+    text-align:center; line-height:1.4;
+    margin-top:8px;
+  }
+  main{
+    flex:1; display:flex; flex-direction:column;
+    padding:18px; gap:14px;
+    max-width:560px; width:100%; margin:0 auto;
+    overflow-y:auto;
+  }
+  .screen{
+    display:none; flex-direction:column; gap:14px;
+    opacity:0; transform:translateY(12px);
+    transition:opacity .38s cubic-bezier(.22,.61,.36,1), transform .38s cubic-bezier(.22,.61,.36,1);
+  }
+  .screen.active{ display:flex; }
+  .screen.show{ opacity:1; transform:translateY(0); }
+
+  .card{
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:10px;
+    padding:18px;
+  }
+  .hint{ color:var(--muted); font-size:13.5px; font-weight:700; line-height:1.55; }
+  .hint b{ color:var(--text); font-weight:800; }
+
+  .filebox{
+    border:1.5px dashed var(--line);
+    border-radius:10px;
+    padding:28px 16px;
+    text-align:center;
+    cursor:pointer;
+    transition:border-color .2s ease, transform .2s ease, background-color .2s ease;
+  }
+  .filebox:active{ border-color:var(--accent); transform:scale(.98); background:var(--panel-2); }
+  .filebox .big{ font-size:15px; font-weight:800; margin-bottom:4px; }
+  .filebox .small{ font-size:12.5px; font-weight:700; color:var(--muted); }
+  input[type=file]{ display:none; }
+
+  label.field{ display:flex; flex-direction:column; gap:6px; font-size:13px; font-weight:700; color:var(--muted); }
+  select, input[type=text]{
+    background:var(--panel-2);
+    border:1px solid var(--line);
+    color:var(--text);
+    border-radius:8px;
+    padding:11px 12px;
+    font-size:15px;
+    font-weight:700;
+    font-family:var(--sans);
+    width:100%;
+    transition:border-color .2s ease, outline-color .2s ease;
+  }
+  select:focus, input[type=text]:focus{ outline:2px solid var(--accent); outline-offset:-1px; }
+
+  .btn{
+    display:flex; align-items:center; justify-content:center;
+    gap:8px;
+    border:none; border-radius:10px;
+    padding:15px 18px;
+    font-size:15.5px; font-weight:800;
+    cursor:pointer;
+    width:100%;
+    transition:transform .15s cubic-bezier(.22,.61,.36,1), filter .15s ease, background-color .2s ease, opacity .2s ease;
+  }
+  .btn-primary{ background:var(--accent); color:var(--accent-text); }
+  .btn-primary:active{ filter:brightness(.92); transform:scale(.97); }
+  .btn-ghost{ background:transparent; color:var(--muted); border:1px solid var(--line); }
+  .btn-ghost:active{ background:var(--panel-2); transform:scale(.97); }
+  .btn-danger{ background:transparent; color:var(--bad); border:1px solid var(--line); }
+  .btn-danger:active{ transform:scale(.97); }
+  .btn:disabled{ opacity:.45; }
+
+  .row{ display:flex; gap:10px; }
+  .row > *{ flex:1; }
+
+  .grid2{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+
+  #reader{
+    width:100%;
+    border-radius:10px;
+    overflow:hidden;
+    background:#000;
+    transition:opacity .3s ease;
+  }
+  #reader video, #reader canvas{ border-radius:10px; }
+
+  .divider{
+    display:flex; align-items:center; gap:10px;
+    color:var(--muted); font-size:12px; font-weight:700;
+  }
+  .divider::before, .divider::after{
+    content:""; flex:1; height:1px; background:var(--line);
+  }
+
+  .result-code{ font-family:var(--mono); font-size:13px; font-weight:700; color:var(--muted); }
+  .result-name{ font-size:17px; font-weight:800; margin:4px 0 14px; color:var(--text); }
+  .result-grid{ display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:6px; }
+  .result-box{
+    background:var(--panel-2); border:1px solid var(--line);
+    border-radius:8px; padding:12px;
+  }
+  .result-box .label{ font-size:11px; font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; }
+  .result-box .value{ font-family:var(--mono); font-size:20px; font-weight:800; margin-top:4px; color:var(--text); }
+  .result-date{ font-size:12px; font-weight:700; color:var(--muted); margin-top:10px; }
+
+  .not-found{ color:var(--bad); font-size:15px; font-weight:800; }
+
+  .result-multi-item{
+    border-top:1px solid var(--line);
+    margin-top:14px; padding-top:14px;
+  }
+
+  #aiResult{
+    background:var(--panel-2); border:1px solid var(--line);
+    border-radius:8px; padding:12px;
+    font-size:13.5px; line-height:1.55; font-weight:700;
+    white-space:pre-wrap;
+  }
+  #aiResult.loading{ color:var(--muted); font-weight:700; }
+
+  #resultCard{
+    opacity:0; transform:translateY(10px);
+  }
+  #resultCard.anim{
+    animation:resultIn .4s cubic-bezier(.22,.61,.36,1) forwards;
+  }
+  @keyframes resultIn{
+    from{ opacity:0; transform:translateY(10px); }
+    to{ opacity:1; transform:translateY(0); }
+  }
+
+  .banner{
+    font-size:12.5px; font-weight:700; color:var(--muted);
+    background:var(--panel-2); border:1px solid var(--line);
+    border-radius:8px; padding:10px 12px; line-height:1.5;
+  }
+
+  table.map-table{ width:100%; border-collapse:collapse; }
+  table.map-table td{ padding:8px 0; vertical-align:middle; }
+  table.map-table td.k{ font-size:13px; font-weight:700; color:var(--muted); width:40%; padding-right:10px; }
+
+  .admin-link{
+    text-align:center; font-size:11px; font-weight:700;
+    color:var(--muted); opacity:.5;
+    padding:10px 0 2px; cursor:pointer;
+    letter-spacing:.03em;
+  }
+  .admin-link:active{ opacity:.9; }
+
+  .pin-overlay{
+    position:fixed; inset:0; z-index:60;
+    background:rgba(0,0,0,.6);
+    display:none; align-items:center; justify-content:center;
+    padding:20px;
+  }
+  .pin-box{
+    background:var(--panel); border:1px solid var(--line);
+    border-radius:12px; padding:22px;
+    width:100%; max-width:300px;
+    display:flex; flex-direction:column; gap:12px;
+  }
+  .pin-title{ font-size:14px; font-weight:800; text-align:center; color:var(--text); }
+  .pin-error{ display:none; color:var(--bad); font-size:12px; font-weight:700; text-align:center; }
+  .pin-box input{
+    text-align:center; letter-spacing:.3em; font-size:20px;
+  }
+  .pin-box .row{ margin-top:2px; }
+
+  #splash{
+    position:fixed; inset:0; z-index:50;
+    background:var(--bg);
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:14px;
+    transition:opacity .45s ease;
+  }
+  #splash.hide{ opacity:0; pointer-events:none; }
+  #splash .brand{
+    font-size:34px; font-weight:800; letter-spacing:.06em; text-transform:uppercase;
+    color:var(--text);
+  }
+  #splash .subbrand{
+    font-size:12.5px; font-weight:700; letter-spacing:.08em; text-transform:uppercase;
+    color:var(--accent); margin-top:-8px;
+  }
+  #splash .spinner{
+    width:28px; height:28px; border-radius:50%;
+    border:3px solid var(--line);
+    border-top-color:var(--accent);
+    animation:spin .8s linear infinite;
+    margin-top:6px;
+  }
+  @keyframes spin{ to{ transform:rotate(360deg); } }
+
+  ::selection{ background:var(--accent); color:var(--accent-text); }
+</style>
+</head>
+<body>
+
+<div id="splash">
+  <div class="brand">Lacoste</div>
+  <div class="subbrand">Buscador V1 by ruggia</div>
+  <div class="spinner"></div>
+</div>
+
+<div class="pin-overlay" id="pinModal">
+  <div class="pin-box">
+    <div class="pin-title">Clave de administrador</div>
+    <input type="password" id="pinInput" inputmode="numeric" pattern="[0-9]*" placeholder="••••" autocomplete="off">
+    <div class="pin-error" id="pinError">Clave incorrecta, probá de nuevo.</div>
+    <div class="row">
+      <button class="btn btn-ghost" id="pinCancel">Cancelar</button>
+      <button class="btn btn-primary" id="pinConfirm">Entrar</button>
+    </div>
+  </div>
+</div>
+
+<div id="bgCroco" aria-hidden="true">
+  <svg viewBox="0 0 400 200" xmlns="http://www.w3.org/2000/svg">
+    <g fill="#3E9962">
+      <path d="M20,150 C40,90 90,60 150,58 C160,40 180,25 205,22 C202,32 200,42 202,50 C230,45 260,50 285,65 C300,55 320,50 340,52 C332,60 325,68 322,78 C345,85 365,100 378,120 C365,118 352,120 342,128 C348,138 350,150 346,162 C336,155 326,152 316,154 C312,166 304,176 292,182 C292,170 288,160 280,152 C255,168 225,175 195,172 C190,182 180,190 168,192 C170,180 172,170 178,160 C140,158 100,165 68,180 C75,168 85,158 98,150 C70,152 44,152 20,150 Z"/>
+      <circle cx="196" cy="34" r="4" fill="#0E1A13"/>
+      <path d="M150,58 L138,52 M158,56 L148,48 M166,54 L158,45" stroke="#0E1A13" stroke-width="2" fill="none"/>
+      <path d="M60,148 L50,168 M78,150 L72,172 M100,152 L98,174" stroke="#0E1A13" stroke-width="3" fill="none"/>
+    </g>
+  </svg>
+</div>
+
+<header>
+  <h1 class="brand">Lacoste</h1>
+  <div class="subbrand">Buscador V1 by ruggia</div>
+  <div class="status" id="headerStatus">sin datos cargados</div>
+</header>
+
+<main>
+
+  <!-- PANTALLA 1: cargar archivo -->
+  <section class="screen" id="screen-upload">
+    <div class="card">
+      <div class="filebox" id="fileBox">
+        <div class="big">Cargar archivo de productos</div>
+        <div class="small">Tocá para elegir un archivo .xlsx, .xls, .csv o .json</div>
+      </div>
+      <input type="file" id="fileInput" accept=".xlsx,.xls,.csv,.json">
+    </div>
+    <div class="hint">
+      El archivo debe tener columnas para <b>código</b> (el dato que vas a escanear o tipear), <b>precio</b> y <b>cantidad</b>. Podés elegir también una columna de <b>código alternativo</b> si algunos productos tienen dos códigos.
+      La fecha que se muestre en cada consulta va a ser la fecha en la que cargaste este archivo.
+    </div>
+    <button class="btn btn-ghost" id="btnSampleData">Probar con datos de ejemplo</button>
+  </section>
+
+  <!-- PANTALLA 2: mapear columnas -->
+  <section class="screen" id="screen-map">
+    <div class="card">
+      <div class="hint" style="margin-bottom:14px;">Encontramos estas columnas en el archivo. Indicá qué representa cada una:</div>
+      <table class="map-table">
+        <tr><td class="k">Código principal</td><td><select id="mapCodigo"></select></td></tr>
+        <tr><td class="k">Código alternativo</td><td><select id="mapAlt"></select></td></tr>
+        <tr><td class="k">Nombre / descripción</td><td><select id="mapDesc"></select></td></tr>
+        <tr><td class="k">Precio</td><td><select id="mapPrecio"></select></td></tr>
+        <tr><td class="k">Cantidad</td><td><select id="mapCantidad"></select></td></tr>
+        <tr><td class="k">Talle (opcional)</td><td><select id="mapTalle"></select></td></tr>
+        <tr><td class="k">Color (opcional)</td><td><select id="mapColor"></select></td></tr>
+      </table>
+    </div>
+    <button class="btn btn-primary" id="btnConfirmMap">Confirmar y cargar datos</button>
+    <button class="btn btn-ghost" id="btnCancelMap">Elegir otro archivo</button>
+    <div class="banner" id="mapError" style="display:none; color:var(--bad);"></div>
+  </section>
+
+  <!-- PANTALLA 3: buscar / escanear -->
+  <section class="screen" id="screen-scan">
+    <div class="banner" id="sampleBanner" style="display:none;"></div>
+    <div class="card" id="reader-card">
+      <div id="reader"></div>
+      <button class="btn btn-primary" id="btnStartScan" style="margin-top:14px;">Escanear código de barras</button>
+      <button class="btn btn-ghost" id="btnStopScan" style="margin-top:10px; display:none;">Detener cámara</button>
+    </div>
+
+    <div class="divider">o ingresalo manualmente</div>
+
+    <div class="card">
+      <div class="row">
+        <input type="text" id="manualCode" placeholder="Código (usá * para lo que no sepas)" inputmode="text">
+        <button class="btn btn-primary" id="btnManualSearch" style="width:auto; padding-left:22px; padding-right:22px;">Buscar</button>
+      </div>
+    </div>
+
+    <div class="card" id="resultCard" style="display:none;"></div>
+
+    <div class="divider">no sabés el color de una prenda</div>
+
+    <div class="card">
+      <div class="hint" style="margin-bottom:12px;">
+        <b>Demo de IA.</b> Sacá o subí una foto de la prenda y, si la sabés, escribí el parte del código que ya tenés (ej. <b>TH6709</b>). La IA busca en internet (Lacoste de otros países, Google) y te sugiere el color más probable.
+      </div>
+      <label class="field" style="margin-bottom:10px;">
+        Código conocido (opcional)
+        <input type="text" id="aiKnownCode" placeholder="ej. TH6709">
+      </label>
+      <div class="row" style="margin-bottom:10px;">
+        <button class="btn btn-ghost" id="btnAiPhotoCam" type="button">📷 Sacar foto</button>
+        <button class="btn btn-ghost" id="btnAiPhotoLib" type="button">🖼 Elegir de galería</button>
+      </div>
+      <input type="file" id="aiFileCam" accept="image/*" capture="environment" style="display:none;">
+      <input type="file" id="aiFileLib" accept="image/*" style="display:none;">
+      <img id="aiPreview" style="display:none; width:100%; border-radius:8px; margin-bottom:10px;">
+      <button class="btn btn-primary" id="btnAiAnalyze" disabled>Analizar con IA</button>
+      <div id="aiResult" style="display:none; margin-top:12px;"></div>
+      <div class="banner" style="margin-top:12px;">
+        Esta función es una <b>prueba</b>: solo funciona mientras la probás acá, dentro del chat de Claude. Al subir la página a Netlify/GitHub para las 20 personas, este panel específico no va a andar sin conectar un servidor propio con clave de API.
+      </div>
+    </div>
+
+    <div class="banner">
+      Para que la cámara funcione en iPhone/Safari, esta página tiene que abrirse por HTTPS. GitHub Pages y Netlify sirven para esto. No abras el HTML directamente como archivo local.
+    </div>
+    <div class="admin-link" id="btnReset">Admin · actualizar catálogo</div>
+  </section>
+
+</main>
+
+<script>
+(function(){
+  "use strict";
+
+  var state = {
+    items: [],
+    byCode: new Map(),
+    byAlt: new Map(),
+    loadDateISO: null,
+    loadDateLabel: null,
+    mapping: null,
+    rawParsed: null,
+    columns: []
+  };
+
+  var STORAGE_KEY = "inventario-precios-v1";
+  var ADMIN_PIN = "2580"; // <-- cambiá este número por la clave que quieras usar
+  var html5Qrcode = null;
+  var scanning = false;
+
+  function checkAdminPin(){
+    return new Promise(function(resolve){
+      var modal = $("pinModal"), input = $("pinInput"), err = $("pinError");
+      input.value = "";
+      err.style.display = "none";
+      modal.style.display = "flex";
+      setTimeout(function(){ input.focus(); }, 50);
+
+      function close(result){
+        modal.style.display = "none";
+        $("pinConfirm").removeEventListener("click", onConfirm);
+        $("pinCancel").removeEventListener("click", onCancel);
+        input.removeEventListener("keydown", onKey);
+        resolve(result);
+      }
+      function onConfirm(){
+        if(input.value === ADMIN_PIN){ close(true); }
+        else{ err.style.display = "block"; input.value = ""; input.focus(); }
+      }
+      function onCancel(){ close(false); }
+      function onKey(e){ if(e.key === "Enter") onConfirm(); }
+
+      $("pinConfirm").addEventListener("click", onConfirm);
+      $("pinCancel").addEventListener("click", onCancel);
+      input.addEventListener("keydown", onKey);
+    });
+  }
+
+  function $(id){ return document.getElementById(id); }
+
+  function showScreen(id){
+    document.querySelectorAll(".screen").forEach(function(s){ s.classList.remove("active","show"); });
+    var el = $(id);
+    el.classList.add("active");
+    requestAnimationFrame(function(){
+      requestAnimationFrame(function(){ el.classList.add("show"); });
+    });
+  }
+
+  function updateHeaderStatus(){
+    if(state.items.length){
+      $("headerStatus").textContent = state.items.length.toLocaleString("es-AR") + " productos · " + state.loadDateLabel;
+    } else {
+      $("headerStatus").textContent = "sin datos cargados";
+    }
+  }
+
+  function formatMoney(n){
+    if(n === null || n === undefined || isNaN(n)) return "—";
+    return "$ " + n.toLocaleString("es-AR", {minimumFractionDigits:2, maximumFractionDigits:2});
+  }
+  function formatQty(n){
+    if(n === null || n === undefined || isNaN(n)) return "—";
+    return n.toLocaleString("es-AR");
+  }
+  function toNumber(v){
+    if(typeof v === "number") return v;
+    if(v === null || v === undefined) return NaN;
+    var s = String(v).trim().replace(/[^\d.,-]/g,"");
+    if(s.indexOf(",") > -1 && s.indexOf(".") > -1){
+      s = s.replace(/\./g,"").replace(",",".");
+    } else if(s.indexOf(",") > -1){
+      s = s.replace(",",".");
+    }
+    return parseFloat(s);
+  }
+  function normCode(v){
+    return String(v === null || v === undefined ? "" : v).trim();
+  }
+
+  // ---------- Carga de archivo ----------
+
+  $("fileBox").addEventListener("click", function(){ $("fileInput").click(); });
+
+  $("fileInput").addEventListener("change", function(e){
+    var file = e.target.files[0];
+    if(!file) return;
+    $("sampleBanner").style.display = "none";
+    var name = file.name.toLowerCase();
+    var reader = new FileReader();
+
+    if(name.endsWith(".json")){
+      reader.onload = function(ev){
+        try{
+          var data = JSON.parse(ev.target.result);
+          if(!Array.isArray(data)){
+            var arr = null;
+            for(var k in data){ if(Array.isArray(data[k])){ arr = data[k]; break; } }
+            data = arr || [];
+          }
+          onParsed(data);
+        }catch(err){
+          alert("No se pudo leer el archivo JSON. Verificá que sea una lista de productos válida.");
+        }
+      };
+      reader.readAsText(file);
+    } else {
+      reader.onload = function(ev){
+        try{
+          var wb = XLSX.read(ev.target.result, {type:"binary"});
+          var sheet = wb.Sheets[wb.SheetNames[0]];
+          var data = XLSX.utils.sheet_to_json(sheet, {defval:""});
+          onParsed(data);
+        }catch(err){
+          alert("No se pudo leer el archivo. Verificá que sea un Excel o CSV válido.");
+        }
+      };
+      reader.readAsBinaryString(file);
+    }
+  });
+
+  function onParsed(data){
+    if(!data || !data.length){
+      alert("El archivo no tiene filas de datos.");
+      return;
+    }
+    state.rawParsed = data;
+    state.columns = Object.keys(data[0]);
+    buildMappingScreen();
+    showScreen("screen-map");
+  }
+
+  // ---------- Datos de ejemplo (demo) ----------
+
+  var SAMPLE_ROWS = [
+    {Codigo:"7791234567890", CodigoAlt:"LAC-001-M-AZ", Nombre:"Chomba Lacoste Classic Fit", Precio:45000, Cantidad:12, Talle:"M",  Color:"Azul"},
+    {Codigo:"7791234567891", CodigoAlt:"LAC-001-L-AZ", Nombre:"Chomba Lacoste Classic Fit", Precio:45000, Cantidad:8,  Talle:"L",  Color:"Azul"},
+    {Codigo:"7791234567892", CodigoAlt:"LAC-001-M-BL", Nombre:"Chomba Lacoste Classic Fit", Precio:45000, Cantidad:5,  Talle:"M",  Color:"Blanco"},
+    {Codigo:"7791234567893", CodigoAlt:"LAC-002-S-NG", Nombre:"Remera Lacoste Sport",       Precio:32000, Cantidad:20, Talle:"S",  Color:"Negro"},
+    {Codigo:"7791234567894", CodigoAlt:"LAC-002-M-NG", Nombre:"Remera Lacoste Sport",       Precio:32000, Cantidad:15, Talle:"M",  Color:"Negro"},
+    {Codigo:"7791234567895", CodigoAlt:"LAC-003-40-BE", Nombre:"Pantalón Lacoste Chino",    Precio:58000, Cantidad:7,  Talle:"40", Color:"Beige"},
+    {Codigo:"7791234567896", CodigoAlt:"LAC-003-42-BE", Nombre:"Pantalón Lacoste Chino",    Precio:58000, Cantidad:4,  Talle:"42", Color:"Beige"},
+    {Codigo:"7791234567897", CodigoAlt:"LAC-004-L-VE",  Nombre:"Campera Lacoste Softshell", Precio:89000, Cantidad:3,  Talle:"L",  Color:"Verde"},
+    {Codigo:"7791234567898", CodigoAlt:"LAC-005-U-BL",  Nombre:"Gorra Lacoste Logo",        Precio:21000, Cantidad:25, Talle:"Único", Color:"Blanco"},
+    {Codigo:"7791234567899", CodigoAlt:"LAC-006-42-BL", Nombre:"Zapatillas Lacoste Court",  Precio:76000, Cantidad:6,  Talle:"42", Color:"Blanco"}
+  ];
+
+  $("btnSampleData").addEventListener("click", function(){
+    var mapping = {codigo:"Codigo", alt:"CodigoAlt", desc:"Nombre", precio:"Precio", cantidad:"Cantidad", talle:"Talle", color:"Color"};
+    applyMapping(mapping, SAMPLE_ROWS, new Date(), true);
+    var lines = SAMPLE_ROWS.map(function(r){
+      return "· " + r.Codigo + " — " + r.Nombre + " (" + r.Talle + (r.Color ? ", "+r.Color : "") + ")";
+    }).join("<br>");
+    var banner = $("sampleBanner");
+    banner.style.display = "block";
+    banner.innerHTML = "<b>Datos de ejemplo cargados (solo en este dispositivo, no se comparten).</b> Escribí manualmente alguno de estos códigos para probar (o el código alternativo, ej. LAC-001-M-AZ):<br><br>" + lines;
+  });
+
+  function guessColumn(cols, preferExact, patterns){
+    var lower = cols.map(function(c){ return c.toLowerCase(); });
+    if(preferExact){
+      for(var p=0;p<preferExact.length;p++){
+        var idx = lower.indexOf(preferExact[p]);
+        if(idx > -1) return cols[idx];
+      }
+    }
+    for(var i=0;i<lower.length;i++){
+      for(var j=0;j<patterns.length;j++){
+        if(lower[i].indexOf(patterns[j]) > -1) return cols[i];
+      }
+    }
+    return "";
+  }
+
+  function buildMappingScreen(){
+    var cols = state.columns;
+    var optionsHtml = '<option value="">— ninguna —</option>' + cols.map(function(c){
+      return '<option value="'+escapeHtml(c)+'">'+escapeHtml(c)+'</option>';
+    }).join("");
+
+    $("mapCodigo").innerHTML = optionsHtml;
+    $("mapAlt").innerHTML = optionsHtml;
+    $("mapDesc").innerHTML = optionsHtml;
+    $("mapPrecio").innerHTML = optionsHtml;
+    $("mapCantidad").innerHTML = optionsHtml;
+    $("mapTalle").innerHTML = optionsHtml;
+    $("mapColor").innerHTML = optionsHtml;
+
+    setSelectValue("mapCodigo", guessColumn(cols, ["nombre","codigo","código"], ["codig","cod"]) || cols[0]);
+    setSelectValue("mapAlt", guessColumn(cols, [], ["alt","secundario","alternativ"]));
+    setSelectValue("mapDesc", guessColumn(cols, ["descripcion","descripción","detalle"], ["descrip","detalle","nombre"]));
+    setSelectValue("mapPrecio", guessColumn(cols, [], ["preci"]));
+    setSelectValue("mapCantidad", guessColumn(cols, [], ["cantid","stock","existenc"]));
+    setSelectValue("mapTalle", guessColumn(cols, [], ["talle","talla","size"]));
+    setSelectValue("mapColor", guessColumn(cols, [], ["color"]));
+
+    $("mapError").style.display = "none";
+  }
+
+  function setSelectValue(id, value){
+    var el = $(id);
+    if(value){ el.value = value; }
+  }
+
+  function escapeHtml(s){
+    return String(s).replace(/[&<>"']/g, function(c){
+      return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];
+    });
+  }
+
+  $("btnCancelMap").addEventListener("click", function(){
+    $("fileInput").value = "";
+    showScreen("screen-upload");
+  });
+
+  $("btnConfirmMap").addEventListener("click", function(){
+    var mapping = {
+      codigo: $("mapCodigo").value,
+      alt: $("mapAlt").value,
+      desc: $("mapDesc").value,
+      precio: $("mapPrecio").value,
+      cantidad: $("mapCantidad").value,
+      talle: $("mapTalle").value,
+      color: $("mapColor").value
+    };
+    if(!mapping.codigo || !mapping.precio || !mapping.cantidad){
+      $("mapError").style.display = "block";
+      $("mapError").textContent = "Elegí al menos columna de código, precio y cantidad.";
+      return;
+    }
+    applyMapping(mapping, state.rawParsed, new Date());
+  });
+
+  function applyMapping(mapping, rows, loadDate, skipPersist){
+    var byCode = new Map();
+    var byAlt = new Map();
+    var items = [];
+
+    rows.forEach(function(row){
+      var item = {
+        codigo: normCode(row[mapping.codigo]),
+        alt: mapping.alt ? normCode(row[mapping.alt]) : "",
+        desc: mapping.desc ? String(row[mapping.desc] || "") : "",
+        precio: toNumber(row[mapping.precio]),
+        cantidad: toNumber(row[mapping.cantidad]),
+        talle: mapping.talle ? String(row[mapping.talle] || "") : "",
+        color: mapping.color ? String(row[mapping.color] || "") : ""
+      };
+      if(!item.codigo) return;
+      items.push(item);
+      byCode.set(item.codigo, item);
+      byCode.set(item.codigo.toLowerCase(), item);
+      if(item.alt){
+        byAlt.set(item.alt, item);
+        byAlt.set(item.alt.toLowerCase(), item);
+      }
+    });
+
+    state.items = items;
+    state.byCode = byCode;
+    state.byAlt = byAlt;
+    state.mapping = mapping;
+    state.loadDateISO = loadDate.toISOString();
+    state.loadDateLabel = loadDate.toLocaleString("es-AR", {
+      day:"2-digit", month:"2-digit", year:"numeric", hour:"2-digit", minute:"2-digit"
+    });
+
+    if(!skipPersist) persist();
+    updateHeaderStatus();
+    showScreen("screen-scan");
+  }
+
+  // ---------- Cifrado de los datos guardados ----------
+  // Los datos se guardan cifrados (AES-GCM) para que no queden legibles
+  // en el almacenamiento compartido. La clave sale de esta frase:
+  var ENCRYPTION_PASSPHRASE = "lacoste-inventario-clave-2026"; // <-- cambiá esta frase si querés otra clave
+
+  var _cryptoKeyPromise = null;
+  function getCryptoKey(){
+    if(_cryptoKeyPromise) return _cryptoKeyPromise;
+    var enc = new TextEncoder();
+    _cryptoKeyPromise = crypto.subtle.importKey(
+      "raw", enc.encode(ENCRYPTION_PASSPHRASE), {name:"PBKDF2"}, false, ["deriveKey"]
+    ).then(function(keyMaterial){
+      return crypto.subtle.deriveKey(
+        { name:"PBKDF2", salt: enc.encode("lacoste-inventario-salt"), iterations:100000, hash:"SHA-256" },
+        keyMaterial,
+        { name:"AES-GCM", length:256 },
+        false,
+        ["encrypt","decrypt"]
+      );
+    });
+    return _cryptoKeyPromise;
+  }
+
+  function bytesToBase64(bytes){
+    var CHUNK = 0x8000, binary = "";
+    for(var i=0;i<bytes.length;i+=CHUNK){
+      binary += String.fromCharCode.apply(null, bytes.subarray(i, i+CHUNK));
+    }
+    return btoa(binary);
+  }
+  function base64ToBytes(b64){
+    var binary = atob(b64);
+    var bytes = new Uint8Array(binary.length);
+    for(var i=0;i<binary.length;i++){ bytes[i] = binary.charCodeAt(i); }
+    return bytes;
+  }
+
+  function encryptPayload(plaintext){
+    return getCryptoKey().then(function(key){
+      var iv = crypto.getRandomValues(new Uint8Array(12));
+      var enc = new TextEncoder();
+      return crypto.subtle.encrypt({name:"AES-GCM", iv:iv}, key, enc.encode(plaintext)).then(function(cipherBuf){
+        var cipherBytes = new Uint8Array(cipherBuf);
+        var combined = new Uint8Array(iv.length + cipherBytes.length);
+        combined.set(iv, 0);
+        combined.set(cipherBytes, iv.length);
+        return bytesToBase64(combined);
+      });
+    });
+  }
+
+  function decryptPayload(b64){
+    return getCryptoKey().then(function(key){
+      var combined = base64ToBytes(b64);
+      var iv = combined.slice(0, 12);
+      var cipherBytes = combined.slice(12);
+      return crypto.subtle.decrypt({name:"AES-GCM", iv:iv}, key, cipherBytes).then(function(plainBuf){
+        return new TextDecoder().decode(plainBuf);
+      });
+    });
+  }
+
+  function persist(){
+    try{
+      var payload = JSON.stringify({
+        items: state.items,
+        loadDateISO: state.loadDateISO,
+        loadDateLabel: state.loadDateLabel,
+        mapping: state.mapping
+      });
+      if(window.storage && window.storage.set && window.crypto && window.crypto.subtle){
+        encryptPayload(payload).then(function(encrypted){
+          window.storage.set(STORAGE_KEY, encrypted, true).catch(function(){});
+        }).catch(function(){});
+      }
+    }catch(e){ /* si el dataset es muy grande o storage falla, seguimos igual en memoria */ }
+  }
+
+  function loadSharedData(){
+    return new Promise(function(resolve){
+      if(!(window.storage && window.storage.get) || !(window.crypto && window.crypto.subtle)){ resolve(); return; }
+      window.storage.get(STORAGE_KEY, true).then(function(res){
+        if(res && res.value){
+          decryptPayload(res.value).then(function(jsonStr){
+            try{
+              var data = JSON.parse(jsonStr);
+              var byCode = new Map(), byAlt = new Map();
+              data.items.forEach(function(item){
+                byCode.set(item.codigo, item);
+                byCode.set(item.codigo.toLowerCase(), item);
+                if(item.alt){ byAlt.set(item.alt, item); byAlt.set(item.alt.toLowerCase(), item); }
+              });
+              state.items = data.items;
+              state.byCode = byCode;
+              state.byAlt = byAlt;
+              state.mapping = data.mapping;
+              state.loadDateISO = data.loadDateISO;
+              state.loadDateLabel = data.loadDateLabel;
+            }catch(e){ /* si el dato guardado está corrupto o la clave cambió, seguimos sin datos */ }
+            resolve();
+          }).catch(function(){ resolve(); });
+        } else {
+          resolve();
+        }
+      }).catch(function(){ resolve(); });
+    });
+  }
+
+  function sleep(ms){ return new Promise(function(r){ setTimeout(r, ms); }); }
+
+  $("btnReset").addEventListener("click", function(){
+    checkAdminPin().then(function(ok){
+      if(!ok) return;
+      if(scanning) stopScanning();
+      $("fileInput").value = "";
+      $("resultCard").style.display = "none";
+      $("sampleBanner").style.display = "none";
+      showScreen("screen-upload");
+    });
+  });
+
+  // ---------- Búsqueda ----------
+
+  function lookup(codeRaw){
+    var code = normCode(codeRaw);
+    if(!code) return null;
+    return state.byCode.get(code) || state.byCode.get(code.toLowerCase())
+        || state.byAlt.get(code) || state.byAlt.get(code.toLowerCase())
+        || null;
+  }
+
+  function escapeRegex(s){
+    return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  }
+
+  function wildcardToRegex(pattern){
+    var parts = pattern.split("*").map(escapeRegex);
+    return new RegExp("^" + parts.join(".*") + "$", "i");
+  }
+
+  function searchByWildcard(pattern){
+    var regex = wildcardToRegex(pattern);
+    var matches = [];
+    state.items.forEach(function(item){
+      if(regex.test(item.codigo) || (item.alt && regex.test(item.alt))){
+        matches.push(item);
+      }
+    });
+    return matches;
+  }
+
+  function performSearch(codeRaw){
+    var code = normCode(codeRaw);
+    if(!code) return;
+    if(code.indexOf("*") > -1){
+      renderResults(code, searchByWildcard(code));
+    } else {
+      var item = lookup(code);
+      renderResults(code, item ? [item] : []);
+    }
+  }
+
+  function itemBlock(item){
+    return '<div class="result-code">Código: '+escapeHtml(item.codigo)+(item.alt ? " · Alt: "+escapeHtml(item.alt) : "")+'</div>' +
+      '<div class="result-name">'+escapeHtml(item.desc || item.codigo)+
+        (item.talle ? ' · Talle '+escapeHtml(item.talle) : '') +
+        (item.color ? ' · '+escapeHtml(item.color) : '') +
+      '</div>' +
+      '<div class="result-grid">' +
+        '<div class="result-box"><div class="label">Precio</div><div class="value">'+formatMoney(item.precio)+'</div></div>' +
+        '<div class="result-box"><div class="label">Cantidad</div><div class="value">'+formatQty(item.cantidad)+'</div></div>' +
+      '</div>';
+  }
+
+  function renderResults(code, items){
+    var card = $("resultCard");
+    card.style.display = "block";
+    card.classList.remove("anim");
+    void card.offsetWidth;
+    card.classList.add("anim");
+
+    if(!items || !items.length){
+      card.innerHTML =
+        '<div class="result-code">Código: '+escapeHtml(code)+'</div>' +
+        '<div class="not-found">No se encontró ningún producto con ese código.</div>';
+      return;
+    }
+
+    if(items.length === 1){
+      card.innerHTML = itemBlock(items[0]) +
+        '<div class="result-date">Datos actualizados al '+escapeHtml(state.loadDateLabel)+'</div>';
+      return;
+    }
+
+    var html = '<div class="result-code" style="margin-bottom:10px;">Búsqueda "'+escapeHtml(code)+'" · '+items.length+' coincidencias</div>';
+    items.forEach(function(item, idx){
+      html += '<div'+(idx > 0 ? ' class="result-multi-item"' : '')+'>' + itemBlock(item) + '</div>';
+    });
+    html += '<div class="result-date">Datos actualizados al '+escapeHtml(state.loadDateLabel)+'</div>';
+    card.innerHTML = html;
+  }
+
+  $("btnManualSearch").addEventListener("click", doManualSearch);
+  $("manualCode").addEventListener("keydown", function(e){
+    if(e.key === "Enter") doManualSearch();
+  });
+  function doManualSearch(){
+    var code = $("manualCode").value;
+    if(!code.trim()) return;
+    performSearch(code);
+  }
+
+  // ---------- Escaneo de cámara ----------
+  //
+  // Usa @zxing/browser sobre getUserMedia. Esto evita depender del
+  // BarcodeDetector nativo (que no está disponible de forma uniforme en Safari)
+  // y permite decodificar códigos 1D/2D desde la cámara del iPhone.
+  var zxingControls = null;
+  var zxingReader = null;
+
+  $("btnStartScan").addEventListener("click", startScanning);
+  $("btnStopScan").addEventListener("click", stopScanning);
+
+  function showScannerMessage(msg){
+    var reader = $("reader");
+    reader.innerHTML =
+      '<div style="padding:16px;color:#8FAE9B;text-align:center;font-size:13px;">' +
+      escapeHtml(msg) + '</div>';
+  }
+
+  async function startScanning(){
+    if(scanning) return;
+
+    if(!window.isSecureContext || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+      alert("Safari necesita HTTPS para usar la cámara. Abrí esta página desde GitHub Pages, Netlify u otro dominio HTTPS.");
+      return;
+    }
+
+    if(typeof ZXingBrowser === "undefined"){
+      alert("No se pudo cargar el lector de códigos. Revisá la conexión a internet.");
+      return;
+    }
+
+    try{
+      // Pedimos explícitamente la cámara trasera. En iPhone esto suele ser
+      // más fiable que seleccionar un deviceId antes de obtener permisos.
+      var stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: { ideal: "environment" },
+          width: { ideal: 1280 },
+          height: { ideal: 720 }
+        },
+        audio: false
+      });
+
+      // Cerramos el stream temporal: ZXing abrirá el suyo para decodificar.
+      stream.getTracks().forEach(function(track){ track.stop(); });
+
+      var video = document.createElement("video");
+      video.id = "barcode-video";
+      video.autoplay = true;
+      video.muted = true;
+      video.playsInline = true;
+      video.setAttribute("playsinline", "");
+      video.setAttribute("webkit-playsinline", "");
+      video.style.width = "100%";
+      video.style.display = "block";
+      video.style.minHeight = "220px";
+      video.style.objectFit = "cover";
+      video.style.background = "#000";
+
+      $("reader").innerHTML = "";
+      $("reader").appendChild(video);
+
+      zxingReader = new ZXingBrowser.MultiFormatReader();
+
+      // ZXing soporta EAN/UPC, Code 128, Code 39, ITF, Codabar y QR,
+      // que son los formatos que ya contemplaba el lector anterior.
+      var hints = new Map();
+      hints.set(ZXingBrowser.DecodeHintType.POSSIBLE_FORMATS, [
+        ZXingBrowser.BarcodeFormat.EAN_13,
+        ZXingBrowser.BarcodeFormat.EAN_8,
+        ZXingBrowser.BarcodeFormat.UPC_A,
+        ZXingBrowser.BarcodeFormat.UPC_E,
+        ZXingBrowser.BarcodeFormat.CODE_128,
+        ZXingBrowser.BarcodeFormat.CODE_39,
+        ZXingBrowser.BarcodeFormat.CODABAR,
+        ZXingBrowser.BarcodeFormat.ITF,
+        ZXingBrowser.BarcodeFormat.QR_CODE
+      ]);
+      zxingReader.setHints(hints);
+
+      zxingControls = await zxingReader.decodeFromConstraints(
+        {
+          video: {
+            facingMode: { ideal: "environment" },
+            width: { ideal: 1280 },
+            height: { ideal: 720 }
+          },
+          audio: false
+        },
+        video,
+        function(result, error, controls){
+          if(result){
+            var code = result.getText();
+
+            // Evita lecturas repetidas del mismo código.
+            if(code && code.trim()){
+              performSearch(code.trim());
+              stopScanning();
+            }
+          }
+        }
+      );
+
+      scanning = true;
+      $("btnStartScan").style.display = "none";
+      $("btnStopScan").style.display = "block";
+
+    }catch(err){
+      scanning = false;
+      zxingControls = null;
+
+      console.error("Error del escáner:", err);
+
+      var msg = "No se pudo abrir la cámara.";
+      if(err && (err.name === "NotAllowedError" || err.name === "PermissionDeniedError")){
+        msg = "Safari bloqueó el acceso a la cámara. Andá a Ajustes → Safari → Cámara y permití el acceso para este sitio.";
+      }else if(err && err.name === "NotFoundError"){
+        msg = "No se encontró una cámara disponible.";
+      }else if(err && err.name === "NotReadableError"){
+        msg = "La cámara está siendo usada por otra aplicación.";
+      }
+
+      alert(msg + "\n\nTambién podés usar la búsqueda manual.");
+      showScannerMessage("Cámara lista para escanear.");
+    }
+  }
+
+  async function stopScanning(){
+    if(zxingControls){
+      try{
+        zxingControls.stop();
+      }catch(e){}
+      zxingControls = null;
+    }
+
+    if(zxingReader){
+      try{
+        zxingReader.reset();
+      }catch(e){}
+      zxingReader = null;
+    }
+
+    var video = $("barcode-video");
+    if(video && video.srcObject){
+      video.srcObject.getTracks().forEach(function(track){ track.stop(); });
+      video.srcObject = null;
+    }
+
+    scanning = false;
+    $("btnStartScan").style.display = "block";
+    $("btnStopScan").style.display = "none";
+  }
+
+  // ---------- Inicio ----------
+  Promise.all([loadSharedData(), sleep(2000)]).then(function(){
+    updateHeaderStatus();
+    showScreen("screen-scan");
+    var splash = $("splash");
+    splash.classList.add("hide");
+    setTimeout(function(){ splash.style.display = "none"; }, 500);
+  });
+
+})();
+</script>
+
+</body>
+</html>
